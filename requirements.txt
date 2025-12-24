@@ -1,0 +1,15 @@
+easyocr
+opencv-python
+pandas
+numpy
+python-bidi
+arabic-reshaper
+Pillow
+openpyxl
+fire
+lmdb
+nltk
+natsort
+scikit-learn
+pymupdf
+python-docx

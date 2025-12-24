@@ -1,0 +1,56 @@
+import argparse
+import os
+from src.core_ocr import OCREngine
+from src.extraction import SpecificationExtractor
+from src.table_engine import TableExtractor
+
+def main():
+    parser = argparse.ArgumentParser(description="Cable Specification OCR System")
+    parser.add_argument("--image", required=True, help="Path to input image")
+    parser.add_argument("--mode", choices=["text", "table"], default="text", help="Operation mode: 'text' for specs/text extraction, 'table' for table extraction")
+    parser.add_argument("--output", help="Output path (for CSV tables)")
+
+    parser.add_argument("--langs", default="en", help="Comma-separated list of languages (e.g., 'en,ar')")
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.image):
+        print(f"Error: File {args.image} not found.")
+        return
+
+    # Initialize Engine
+    languages = args.langs.split(',')
+    ocr = OCREngine(languages=languages)
+
+    if args.mode == "text":
+        print(f"Reading text from: {args.image} ...")
+        results = ocr.read_image(args.image, detail=0)
+        full_text = " ".join(results)
+        print("\n--- Extracted Text ---")
+        print(full_text)
+        
+        print("\n--- Extracted Specifications ---")
+        extractor = SpecificationExtractor()
+        specs = extractor.extract_specs(full_text)
+        for k, v in specs.items():
+            if v:
+                print(f"{k}: {v}")
+            else:
+                print(f"{k}: Not Found")
+
+    elif args.mode == "table":
+        print(f"Extracting table from: {args.image} ...")
+        table_engine = TableExtractor(ocr)
+        try:
+            df = table_engine.extract_table(args.image)
+            print("\n--- Extracted Table ---")
+            print(df)
+            
+            if args.output:
+                df.to_csv(args.output, index=False, encoding='utf-8-sig')
+                print(f"Table saved to: {args.output}")
+        except Exception as e:
+            print(f"Error extracting table: {e}")
+
+if __name__ == "__main__":
+    main()
