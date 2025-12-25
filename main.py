@@ -11,6 +11,7 @@ def main():
     parser.add_argument("--output", help="Output path (for CSV tables)")
 
     parser.add_argument("--langs", default="en", help="Comma-separated list of languages (e.g., 'en,ar')")
+    parser.add_argument("--use-spacy", action="store_true", help="Use SpaCy for robust specification extraction")
 
     args = parser.parse_args()
 
@@ -30,7 +31,15 @@ def main():
         print(full_text)
         
         print("\n--- Extracted Specifications ---")
-        extractor = SpecificationExtractor()
+        
+        if args.use_spacy:
+            print("(Using SpaCy Extractor)")
+            from src.spacy_extraction import SpacyExtractor
+            extractor = SpacyExtractor()
+        else:
+            print("(Using Standard Regex Extractor)")
+            extractor = SpecificationExtractor()
+            
         specs = extractor.extract_specs(full_text)
         for k, v in specs.items():
             if v:

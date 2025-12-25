@@ -13,3 +13,4 @@ natsort
 scikit-learn
 pymupdf
 python-docx
+spacy
