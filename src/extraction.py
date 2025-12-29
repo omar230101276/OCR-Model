@@ -37,8 +37,8 @@ class SpecificationExtractor:
                 "ar": r"(غلاف\s*بي في سي)"
             },
             "operating_temperature": {
-                # 40 C, 4O C
-                "en": r"(\d+[O0]?[\s]*(?:°|\*|deg|degrees)?[\s]*C)",
+                # 40 C, 4O C, 4 0 C
+                "en": r"(\d+(?:[\s]*[O0\d]+)?[\s]*(?:°|\*|deg|degrees)?[\s]*C)",
                 "ar": r"(\d+\s*درجة)"
             },
             "insulation_resistance": {
@@ -141,3 +141,175 @@ class SpecificationExtractor:
              specs["insulation_resistance"] = specs["insulation_resistance"].replace("O", "Ω").replace(" ", "")
 
         return specs
+
+
+# =============================================================================
+# POST-OCR CORRECTION MODULE
+# =============================================================================
+class SpecCorrector:
+    """
+    Expert Post-OCR Correction Module.
+    Normalizes units, expands abbreviations, and formats values before validation.
+    Handles 'NxS' splitting and strict unit enforcement.
+    """
+    def __init__(self):
+        self.corrections_log = []
+
+    def log(self, field, original, corrected, reason):
+        if str(original) != str(corrected):
+            self.corrections_log.append(f"{field}: Changed '{original}' to '{corrected}' ({reason})")
+
+    def correct_voltage(self, val):
+        if not val: return None
+        orig = val
+        # Normalize spacing: 0.6/1kV -> 0.6/1 kV
+        val = re.sub(r'(\d)(k?V)', r'\1 \2', str(val), flags=re.IGNORECASE)
+        # Ensure 'kV' or 'V' casing
+        val = val.replace("kv", "kV").replace("KV", "kV")
+        
+        if orig != val:
+            self.log("Voltage", orig, val, "Formatting")
+        return val
+
+    def correct_temperature(self, val):
+        if not val: return None
+        orig = val
+        val = str(val).strip()
+        
+        # Fix "90"" -> 90 C
+        val = val.replace('"', '').replace("''", "")
+        
+        # Remove internal spaces in digits "4 0" -> "40"
+        # Match digits separated by space, but not separate ranges "40 90"
+        # If it looks like "d d C", it's likely "dd C"
+        if re.search(r'\d\s+\d', val):
+            val_clean = re.sub(r'(\d)\s+(?=\d)', r'\1', val)
+            if val_clean != val:
+                val = val_clean
+        
+        # Specific fix for "4 c" -> UNVERIFIABLE unless clear context
+        # User reported "4 c" should be "40". OCR likely lost the 0.
+        # Heuristic: If single digit d (3-9), assume d0.
+        match_single = re.match(r'^(\d)\s*c$', val, re.IGNORECASE)
+        if match_single:
+            digit = int(match_single.group(1))
+            if 3 <= digit <= 9:
+                new_val = f"{digit}0°C"
+                self.log("Temperature", orig, new_val, "Heuristic Repair (Truncated Zero)")
+                return new_val
+            else:
+                self.log("Temperature", orig, "UNVERIFIABLE", "Ambiguous Single Digit")
+                return "UNVERIFIABLE" 
+            
+        # Standardize "C" to "°C"
+        if (val.lower().endswith("c") or val.lower().endswith("c.")) and "°" not in val:
+            val = re.sub(r'(\d+)\s*[cCx]?\.?$', r'\1°C', val, flags=re.IGNORECASE)
+            
+        if orig != val:
+            self.log("Temperature", orig, val, "Formatting")
+        return val
+
+    def correct_units_generic(self, val):
+         # Mm -> mm
+         if not val: return val
+         val = str(val).replace("Mm", "mm").replace("mM", "mm")
+         return val
+
+    def correct_size_and_cores(self, specs):
+        """
+        Handle CRITICAL PARSING RULE A: NxS mm2
+        Check if conductor_size contains the Core count (e.g. "4x16mm2")
+        """
+        size_val = specs.get('conductor_size')
+        cores_val = specs.get('conductor_count')
+        
+        if not size_val: return specs
+        
+        # Regex for N x S pattern in size string
+        # e.g. "4x16", "4 x 16", "3x50+2x25" (ignoring complex for now, focus on simple NxS)
+        match = re.match(r'^\s*(\d+)\s*[xX]\s*(\d+(?:\.\d+)?)\s*(?:mm[2²]?)?', str(size_val), re.IGNORECASE)
+        
+        if match:
+            n_extracted = match.group(1)
+            s_extracted = match.group(2)
+            
+            # Logic: Parsing "4x16mm2" -> Cores=4, Size=16
+            # User Rule: "NEVER interpret N as the conductor size"
+            
+            new_size = f"{s_extracted} mm²"
+            
+            # Update Size
+            if size_val != new_size:
+                self.log("Conductor Size", size_val, new_size, "NxS Split (Size)")
+                specs['conductor_size'] = new_size
+                
+            # Update Cores (Override or Fill)
+            if not cores_val or str(cores_val) != n_extracted:
+                self.log("Conductor Count", cores_val, n_extracted, "NxS Split (Cores)")
+                specs['conductor_count'] = int(n_extracted)
+                
+        else:
+            # Normal normalization for size if no 'x'
+            # 16mm2 -> 16 mm²
+            clean_size = size_val
+            clean_size = re.sub(r'(\d)\s*mm2', r'\1 mm²', str(clean_size), flags=re.IGNORECASE)
+            clean_size = re.sub(r'(\d)\s*mm²', r'\1 mm²', clean_size) # verify space
+            clean_size = self.correct_units_generic(clean_size)
+            
+            if size_val != clean_size:
+                 self.log("Conductor Size", size_val, clean_size, "Unit Normalization")
+                 specs['conductor_size'] = clean_size
+                 
+        return specs
+
+    def correct_armor(self, val):
+        if not val: return None
+        orig = val
+        val = str(val).strip()
+        mapping = {
+            "AWA": "Aluminum Wire Armor",
+            "SWA": "Steel Wire Armor",
+            "STA": "Steel Tape Armor",
+            "ATA": "Aluminum Tape Armor"
+        }
+        if val.upper() in mapping:
+            val = mapping[val.upper()]
+        
+        if orig != val:
+            self.log("Armor", orig, val, "Expansion")
+        return val
+
+    def correct_resistance(self, val):
+        if not val: return None
+        orig = val
+        val = str(val)
+        # 100MΩkm -> 100 MΩ·km
+        val = val.replace("MΩkm", " MΩ·km").replace("MΩ km", " MΩ·km")
+        # Ensure space
+        val = re.sub(r'(\d)(MΩ)', r'\1 \2', val)
+        
+        if orig != val:
+            self.log("Resistance", orig, val, "Unit Formatting")
+        return val
+
+    def correct_all(self, specs):
+        new_specs = specs.copy()
+        self.corrections_log = []
+
+        # 1. Complex dependency corrections (NxS)
+        new_specs = self.correct_size_and_cores(new_specs)
+
+        # 2. Individual fields
+        if 'voltage' in new_specs:
+            new_specs['voltage'] = self.correct_voltage(new_specs['voltage'])
+            
+        if 'armor' in new_specs:
+            new_specs['armor'] = self.correct_armor(new_specs['armor'])
+            
+        if 'insulation_resistance' in new_specs:
+            new_specs['insulation_resistance'] = self.correct_resistance(new_specs['insulation_resistance'])
+            
+        if 'operating_temperature' in new_specs:
+           new_specs['operating_temperature'] = self.correct_temperature(new_specs['operating_temperature'])
+
+        return new_specs, self.corrections_log

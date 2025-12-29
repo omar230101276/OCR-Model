@@ -1,4 +1,3 @@
-import easyocr
 import cv2
 import numpy as np
 import os
@@ -17,6 +16,9 @@ class OCREngine:
         :param languages: List of supported languages (default: English and Arabic)
         :param gpu: Use GPU for acceleration
         """
+        # Lazy import easyocr to avoid crash on import if DLLs are missing
+        import easyocr
+
         # Define model storage path to be within the project directory in O drive
         model_dir = os.path.join(os.getcwd(), 'models_cache')
         if not os.path.exists(model_dir):
