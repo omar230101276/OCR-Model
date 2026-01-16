@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+venv/
+.env
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Project Specific
+models_cache/
+*.tmp
+temp/
+debug_output.txt
+.gemini/
