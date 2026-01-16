@@ -1,0 +1,20 @@
+import os
+
+# تحديد المجلد الحالي
+folder_path = r"C:\Users\HP\Desktop\Cable_AI_System\data\labels\train"
+
+# المرور على كل الملفات
+for filename in os.listdir(folder_path):
+    if filename.endswith(".txt") and "-" in filename:
+        # فصل الاسم عند أول علامة "-" وأخذ الجزء الثاني
+        new_name = filename.split('-', 1)[1]
+        
+        # المسار الكامل القديم والجديد
+        old_file = os.path.join(folder_path, filename)
+        new_file = os.path.join(folder_path, new_name)
+        
+        # إعادة التسمية
+        os.rename(old_file, new_file)
+        print(f"تم تصحيح: {filename} -> {new_name}")
+
+print("تم الانتهاء من تصحيح جميع الأسماء!")

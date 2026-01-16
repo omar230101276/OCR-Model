@@ -1,0 +1,12 @@
+{
+    "cable_type": "Aluminum",
+    "voltage": "0.6/1 kV",
+    "current_rating": "85A",
+    "insulation": "XLPE",
+    "conductor_count": "4",
+    "conductor_size": "16 mm\u00b2",
+    "sheath": "LSZH",
+    "operating_temperature": "40\u00b0C",
+    "insulation_resistance": "100 M\u03a9\u00b7km",
+    "armor": "Aluminum Wire Armor"
+}

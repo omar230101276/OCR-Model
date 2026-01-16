@@ -1,0 +1,6 @@
+path: C:/Users/HP/Desktop/Cable_AI_System/Cable_AI_System/Cable_Dataset
+train: images/train
+val: images/val
+
+nc: 1
+names: ['cable']
